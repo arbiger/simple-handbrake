@@ -1,0 +1,13 @@
+.build/
+dist/
+.swiftpm/
+DerivedData/
+VideoBox.app/
+xcuserdata/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.dmg
+*.pkg
+Vendor/HandBrakeCLI*
