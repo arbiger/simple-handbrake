@@ -2,7 +2,7 @@
 
 ## HandBrake
 
-Video Box uses the HandBrake command-line engine as a local runtime.
+Simple HandBrake Converter uses the HandBrake command-line engine as a local runtime.
 
 - Project: <https://github.com/HandBrake/HandBrake>
 - Pinned release: `1.11.2`
@@ -18,7 +18,7 @@ Public License Version 2 and that a compiled HandBrake build is licensed under
 GPLv2. HandBrake also incorporates separately licensed third-party libraries;
 those terms remain applicable to the runtime.
 
-This repository contains the Video Box frontend and packaging scripts, not the
+This repository contains the app frontend and packaging scripts, not the
 HandBrakeCLI binary, its release archive, or a copy of the HandBrake source
 tree. `.build/` and `dist/` are ignored so a local runtime or app bundle is not
 uploaded accidentally.

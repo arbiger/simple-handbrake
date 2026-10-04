@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Video Box</string>
+	<string>Simple HandBrake Converter</string>
 	<key>CFBundleExecutable</key>
 	<string>VideoBox</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.videobox.app</string>
+	<string>app.simplehandbrake.converter</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Video Box</string>
+	<string>Simple HandBrake</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,6 +27,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Video Box is a local frontend. Bundled HandBrake components retain their own licenses.</string>
+	<string>Simple HandBrake Converter is a local frontend. Bundled HandBrake components retain their own licenses.</string>
 </dict>
 </plist>

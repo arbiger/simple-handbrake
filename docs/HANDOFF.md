@@ -1,19 +1,32 @@
-# Video Box handoff
+# Simple HandBrake Converter handoff
 
-Updated: 2026-09-21
+Updated: 2026-10-04
 
 ## Current state
 
-The MVP is implemented as a native macOS SwiftUI app and has been built and
-smoke-tested from the project root.
+The MVP is a compact native macOS SwiftUI app. Its visible name is Simple
+HandBrake Converter.
+
+The main heading has a short description below it. Preset, output policy, and
+Convert controls share the top row. The input and queue panels share a fixed
+height, the window opens at a compact size, and Clear All is available in the
+queue header when the queue is idle.
+
+Every finished conversion, successful or failed, writes a log file to
+`~/Library/Logs/Simple HandBrake Converter/`. The name carries the source
+name, original size, compressed size, and finish timestamp:
+`name_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log`. The queue header
+has a single Logs button that opens one window listing every log on disk,
+newest first, with the full text of the selected log. Logs contain local file
+paths and are never uploaded.
 
 The visible packaged development app is:
 
-`dist/VideoBox.app`
+`dist/Simple HandBrake Converter.app`
 
 It uses the bundled local HandBrakeCLI runtime at:
 
-`dist/VideoBox.app/Contents/Resources/HandBrakeCLI`
+`dist/Simple HandBrake Converter.app/Contents/Resources/HandBrakeCLI`
 
 ## User workflow
 
@@ -21,6 +34,7 @@ It uses the bundled local HandBrakeCLI runtime at:
 2. Review the queue and generated `<stem>-decoded.mp4` names.
 3. Press `Convert`.
 4. The app processes one file at a time and leaves originals untouched.
+5. Press the Logs button in the queue header to review every log, newest first.
 
 The output policy is fixed for the MVP:
 
@@ -35,7 +49,7 @@ the window title bar and as a badge on the Dock icon. For example, the second
 active file in a seven-file queue shows `2/7`.
 
 Closing the window with the red button leaves the app running so an active
-conversion can continue. Activating the Video Box app again reopens the main
+conversion can continue. Activating the app again reopens the main
 window and preserves the in-memory queue.
 
 ## Build and run
@@ -52,7 +66,7 @@ To build the packaged app with the locally cached HandBrakeCLI:
 ```sh
 VIDEOBOX_HANDBRAKE_CLI="$PWD/.build/vendor/HandBrakeCLI-1.11.2/HandBrakeCLI" \
   scripts/package-app.sh
-open "$PWD/dist/VideoBox.app"
+open "$PWD/dist/Simple HandBrake Converter.app"
 ```
 
 The package script also copies the HandBrake documentation, runtime notice, and
@@ -71,13 +85,14 @@ scripts/package-app.sh             Development app bundling script
 docs/DEV-LOG.md                    Dated project history and evidence
 docs/HANDOFF.md                    This current handoff
 .build/                            Ignored generated builds, QA, and runtime cache
+~/Library/Logs/Simple HandBrake Converter/   Written conversion logs
 ```
 
 ## Evidence already checked
 
 - `swift build` succeeds.
 - `swift build -c release` succeeds.
-- `dist/VideoBox.app` launches locally.
+- `dist/Simple HandBrake Converter.app` launches locally.
 - The red close button leaves the process running and a subsequent app
   activation reopens the main window.
 - The Dock badge and window title use the current queue position format `n/total`.
@@ -115,7 +130,7 @@ implementation cache and intermediate build area.
 
 ## Licensing boundary
 
-Video Box is a separate frontend. HandBrake and its bundled dependencies keep
-their own GPLv2 and third-party license obligations. Preserve the app resources
-under `Contents/Resources/HandBrake`, the runtime notice, and the third-party
-notice when redistributing a bundled build.
+Simple HandBrake Converter is a separate frontend. HandBrake and its bundled
+dependencies keep their own GPLv2 and third-party license obligations. Preserve
+the app resources under `Contents/Resources/HandBrake`, the runtime notice,
+and the third-party notice when redistributing a bundled build.

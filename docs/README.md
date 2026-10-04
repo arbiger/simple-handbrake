@@ -1,4 +1,4 @@
-# Video Box documentation
+# Simple HandBrake Converter documentation
 
 This folder is the durable project record.
 

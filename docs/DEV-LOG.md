@@ -66,12 +66,6 @@
 - The Dock badge is the supported system-visible progress surface; macOS keeps
   the pointer-hover tooltip as the application name.
 
-## Next log entry
-
-Record the first real-user-video test, including source path type, output path,
-CLI exit status, playback/codec verification, and any filename or permission
-edge cases.
-
 ## 2026-09-21 — Publication hygiene and upstream credit
 
 - Added an explicit HandBrake acknowledgement and pinned-runtime record for a
@@ -82,3 +76,82 @@ edge cases.
   cache out of Git.
 - Removed machine-specific absolute paths from the project record before
   publication.
+
+## 2026-09-25 — Compact layout and product name
+
+- Replaced the two-level branded header with one `Simple HandBrake Converter`
+  heading and a short description beneath it.
+- Moved preset, output location, overwrite policy, and Convert action into one
+  top controls row.
+- Added Clear All to the queue header and disabled it while converting.
+- Matched the input and queue panel heights, removed the duplicate file picker,
+  and tightened spacing.
+- Updated the visible macOS app name and package path to
+  `dist/Simple HandBrake Converter.app`.
+
+## 2026-09-29 — Queue controls and panel alignment
+
+- Moved output location and existing-output policy alongside the preset.
+- Added a Clear All queue action, disabled when the queue is empty or active.
+- Set a shared minimum height for the input and queue panels.
+- Removed the duplicate Choose files control; Add files remains in the input
+  panel header.
+
+## 2026-09-29 — Matched panel height and tighter window
+
+- Set the input drop area and queue card to the same fixed height so their
+  outside edges align even when the queue is empty.
+- Reduced the drop area's unused vertical space, page spacing, and padding.
+- Lowered the window's minimum height and set a more compact initial size to
+  remove the large empty band below the progress bar.
+
+## 2026-10-03 — Per-job conversion logs
+
+- Retained HandBrakeCLI output for failed jobs and added a log viewer to each
+  failed queue row.
+- Included the exit code, input/output paths, preset, completion time, and
+  combined CLI output in the diagnostic view.
+- Added Copy Log and Save Log actions. Logs stay in the in-memory queue unless
+  the user explicitly saves one; nothing is uploaded or written automatically.
+
+## 2026-10-04 — Log files on disk with Open button
+
+- Every finished conversion now writes a log file automatically to
+  `~/Library/Logs/Simple HandBrake Converter/`, for successful and failed
+  jobs alike, so records survive quitting the app and clearing the queue.
+- Log file names follow
+  `name_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log`, for example
+  `Holiday2024_4.2GB_1.1GB_2026-10-04-18-30-45.log`. Failed jobs use `NA`
+  for the compressed size.
+- Log contents record the result and exit code, input and output paths, both
+  sizes, the preset, the finish timestamp, and the full combined HandBrakeCLI
+  output.
+- Added an Open Log button and a view sheet on every queue row that has a log,
+  plus a folder button in the queue header to open the logs directory.
+- Successful jobs no longer discard their CLI output, so their logs can be
+  inspected too.
+- The old Save Log dialog was removed; the file already exists on disk.
+- Logs contain local file paths. They stay on the machine and are never
+  uploaded.
+
+## 2026-10-04 — Single logs window, newest first
+
+- Replaced the per-row log buttons and single-log sheet with one Logs window
+  opened from a single Logs button in the queue header.
+- The window reads the log folder from disk, so it lists past sessions as well
+  as the current queue, sorted newest first with the newest entry selected on
+  open.
+- Each row shows the source name, finish timestamp, original size, and
+  compressed size, with a green or red dot for the result. Selecting a row
+  shows the full log text.
+- The window keeps Refresh, Open Log, Reveal in Finder, Copy, and Open Logs
+  Folder.
+- Verified the reader against three real log files written out of order: they
+  listed newest first and the header fields parsed correctly, including a
+  source filename containing a colon.
+
+## Next log entry
+
+Record the first real-user-video test, including source path type, output path,
+CLI exit status, playback/codec verification, and any filename or permission
+edge cases.

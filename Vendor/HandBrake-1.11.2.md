@@ -1,8 +1,8 @@
 # HandBrake runtime
 
-Video Box uses the HandBrake command-line engine as a bundled local runtime.
+Simple HandBrake Converter uses the HandBrake command-line engine as a bundled local runtime.
 
-Video Box is an independent frontend and is not affiliated with or endorsed by
+Simple HandBrake Converter is an independent frontend and is not affiliated with or endorsed by
 HandBrake. It invokes HandBrakeCLI as a local process; it does not include the
 HandBrake source tree in this repository.
 
