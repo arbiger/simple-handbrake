@@ -18,7 +18,14 @@ name, original size, compressed size, and finish timestamp:
 `name_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log`. The queue header
 has a single Logs button that opens one window listing every log on disk,
 newest first, with the full text of the selected log. Logs contain local file
-paths and are never uploaded.
+paths and are never uploaded. HandBrake's repeated `Progress: { ... }` blocks
+are stripped before writing, so a log is a few KB of readable text rather than
+around 1.6 MB of JSON.
+
+When a conversion fails, any partial output file the run created is deleted.
+Because a job whose output already exists is skipped before starting, a file
+found at that point was written by the failed run, and leaving it would make
+every retry skip.
 
 The visible packaged development app is:
 

@@ -180,8 +180,41 @@ private enum ConversionLog {
             "Finished: \(job.finishedAt.map(timestamp) ?? "Unknown")",
             "",
             "--- HandBrakeCLI output ---",
-            job.logOutput.isEmpty ? (job.errorMessage ?? "No output was captured.") : job.logOutput
+            readableOutput(for: job)
         ].joined(separator: "\n")
+    }
+
+    private static func readableOutput(for job: ConversionJob) -> String {
+        guard !job.logOutput.isEmpty else { return job.errorMessage ?? "No output was captured." }
+        return strippingProgressBlocks(job.logOutput)
+    }
+
+    /// Drops HandBrake's repeated `Progress: { ... }` blocks. They are the
+    /// bulk of the raw output and say nothing once the run has finished.
+    static func strippingProgressBlocks(_ text: String) -> String {
+        var kept: [Substring] = []
+        var skipping = false
+
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if skipping {
+                if line == "}" { skipping = false }
+                continue
+            }
+            if line == "Progress: {" {
+                skipping = true
+                continue
+            }
+            kept.append(line)
+        }
+
+        // A log that ends mid-block means the output was truncated. Keeping the
+        // raw text is safer than silently dropping the tail.
+        if skipping { return text }
+
+        while kept.count > 1, kept[kept.count - 1] == "", kept[kept.count - 2] == "" {
+            kept.removeLast()
+        }
+        return kept.joined(separator: "\n")
     }
 
     @discardableResult
@@ -565,6 +598,15 @@ final class VideoBoxModel: ObservableObject {
             jobs[index].status = .failed
             jobs[index].errorMessage = error ?? "HandBrake exited with status \(exitStatus)."
             jobs[index].detail = jobs[index].errorMessage ?? "Conversion failed"
+
+            // We skip any job whose output already exists, so a file present
+            // now was written by this run. Leaving a truncated file behind
+            // would make every retry skip, so remove it.
+            if fileManager.fileExists(atPath: jobs[index].outputURL.path) {
+                try? fileManager.removeItem(at: jobs[index].outputURL)
+                jobs[index].detail += " Partial output removed."
+                jobs[index].outputSize = nil
+            }
         }
 
         // Keep the full output for successful jobs too: the log file records

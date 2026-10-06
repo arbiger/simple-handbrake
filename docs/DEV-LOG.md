@@ -150,6 +150,26 @@
   listed newest first and the header fields parsed correctly, including a
   source filename containing a colon.
 
+## 2026-10-06 — Partial output cleanup and log noise removal
+
+- Diagnosed an exit code 4 from a conversion whose source sits on the SMB
+  share at /Volumes/homes-1. HandBrake encoded and muxed normally, then
+  `av_interleaved_write_frame` failed with `Input/output error` about five
+  minutes in. The share had 1.8 TB free and a 500 MB write plus read-back
+  succeeded immediately afterwards, so the share dropped the connection
+  mid-write. Twelve of thirteen conversions that day succeeded, so this reads
+  as a transient network dropout rather than a preset or encoder problem.
+- HandBrake leaves a truncated output file behind when this happens. Because
+  the app skips any job whose output already exists, that leftover made every
+  retry skip. A failed run now removes the partial output it created, which is
+  safe because a pre-existing output would have been skipped before the run.
+- Stripped HandBrake's repeated `Progress: { ... }` blocks out of the log
+  body. They were 94% of each log, about 1.6 MB per successful conversion.
+  If a log ends mid-block the raw text is kept so a truncated tail is never
+  silently lost.
+- Applied the same filter to the 13 existing logs: 19 MB down to 284 KB, with
+  every header block and all diagnostic lines intact.
+
 ## Next log entry
 
 Record the first real-user-video test, including source path type, output path,
