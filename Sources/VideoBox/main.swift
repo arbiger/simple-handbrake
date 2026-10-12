@@ -149,23 +149,32 @@ private enum ConversionLog {
     }
 
     static func resultDescription(for job: ConversionJob) -> String {
+        if job.errorMessage?.hasPrefix("Cancelled") == true { return "Cancelled" }
         guard let exitStatus = job.exitStatus else { return job.errorMessage ?? "Failed" }
         if exitStatus == 4 { return "Exit code 4 — Unknown Error (best effort)" }
         return "Exit code \(exitStatus)"
     }
 
-    /// name_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log
+    /// name_jobUUID_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log
     static func fileName(for job: ConversionJob) -> String {
         let stem = job.inputURL.deletingPathExtension().lastPathComponent
         let cleaned = stem
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let safeStem = String((cleaned.isEmpty ? "video" : cleaned).prefix(80))
+        var safeStem = ""
+        var stemBytes = 0
+        for scalar in (cleaned.isEmpty ? "video" : cleaned).unicodeScalars {
+            let scalarText = String(scalar)
+            let byteCount = scalarText.utf8.count
+            guard stemBytes + byteCount <= 80 else { break }
+            safeStem.append(scalarText)
+            stemBytes += byteCount
+        }
         let input = job.fileSize.map(sizeLabel) ?? "Unknown"
         let output = job.outputSize.map(sizeLabel) ?? "NA"
         let stamp = timestamp(job.finishedAt ?? Date())
-        return "\(safeStem)_\(input)_\(output)_\(stamp).log"
+        return "\(safeStem)_\(job.id.uuidString)_\(input)_\(output)_\(stamp).log"
     }
 
     static func contents(for job: ConversionJob) -> String {
@@ -178,6 +187,7 @@ private enum ConversionLog {
             "Output size: \(job.outputSize.map(sizeLabel) ?? "Not produced")",
             "Preset: \(VideoBoxModel.preset)",
             "Finished: \(job.finishedAt.map(timestamp) ?? "Unknown")",
+            "Details: \(job.errorMessage ?? "None")",
             "",
             "--- HandBrakeCLI output ---",
             readableOutput(for: job)
@@ -223,7 +233,7 @@ private enum ConversionLog {
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appendingPathComponent(fileName(for: job))
-            try contents(for: job).write(to: url, atomically: true, encoding: .utf8)
+            try Data(contents(for: job).utf8).write(to: url, options: .withoutOverwriting)
             return url
         } catch {
             return nil
@@ -504,6 +514,8 @@ final class VideoBoxModel: ObservableObject {
             return
         }
 
+        currentJobID = job.id
+
         guard let executableURL = resolveHandBrakeCLI() else {
             finish(jobID: job.id, exitStatus: -1, error: "HandBrakeCLI is not bundled.")
             return
@@ -521,22 +533,6 @@ final class VideoBoxModel: ObservableObject {
         process.standardOutput = outputPipe
         process.standardError = outputPipe
 
-        outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            let text = String(decoding: data, as: UTF8.self)
-            Task { @MainActor in
-                self?.consume(output: text, for: job.id)
-            }
-        }
-
-        process.terminationHandler = { [weak self] process in
-            outputPipe.fileHandleForReading.readabilityHandler = nil
-            Task { @MainActor in
-                self?.finish(jobID: job.id, exitStatus: process.terminationStatus, error: nil)
-            }
-        }
-
         jobs[index].status = .running
         jobs[index].detail = "Starting HandBrake"
         currentJobID = job.id
@@ -544,9 +540,47 @@ final class VideoBoxModel: ObservableObject {
 
         do {
             try process.run()
+            try? outputPipe.fileHandleForWriting.close()
+
+            let outputStream = AsyncStream<Data> { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let reader = outputPipe.fileHandleForReading
+                    defer { try? reader.close() }
+                    while true {
+                        let data = reader.availableData
+                        guard !data.isEmpty else { break }
+                        continuation.yield(data)
+                    }
+                    continuation.finish()
+                }
+            }
+
+            Task { @MainActor [weak self] in
+                var capturedOutput = Data()
+                var pendingOutput = Data()
+                for await data in outputStream {
+                    capturedOutput.append(data)
+                    pendingOutput.append(data)
+                    if let newline = pendingOutput.lastIndex(of: 0x0A) {
+                        let completeLines = pendingOutput.prefix(through: newline)
+                        self?.consume(output: String(decoding: completeLines, as: UTF8.self), for: job.id)
+                        pendingOutput.removeSubrange(...newline)
+                    }
+                }
+                if !pendingOutput.isEmpty {
+                    self?.consume(output: String(decoding: pendingOutput, as: UTF8.self), for: job.id)
+                }
+
+                let exitStatus = await Task.detached(priority: .utility) {
+                    process.waitUntilExit()
+                    return process.terminationStatus
+                }.value
+                self?.finish(jobID: job.id, exitStatus: exitStatus, error: nil, output: capturedOutput)
+            }
         } catch {
-            outputPipe.fileHandleForReading.readabilityHandler = nil
-            finish(jobID: job.id, exitStatus: -1, error: error.localizedDescription)
+            try? outputPipe.fileHandleForReading.close()
+            try? outputPipe.fileHandleForWriting.close()
+            finish(jobID: job.id, exitStatus: -1, error: error.localizedDescription, output: Data())
         }
     }
 
@@ -568,44 +602,51 @@ final class VideoBoxModel: ObservableObject {
         }
     }
 
-    private func finish(jobID: UUID, exitStatus: Int32, error: String?) {
-        guard let index = jobs.firstIndex(where: { $0.id == jobID }) else { return }
+    private func finish(jobID: UUID, exitStatus: Int32, error: String?, output: Data? = nil) {
+        guard currentJobID == jobID,
+              let index = jobs.firstIndex(where: { $0.id == jobID }) else { return }
 
+        if let output {
+            jobs[index].logOutput = String(decoding: output, as: UTF8.self)
+        }
         jobs[index].exitStatus = exitStatus
         jobs[index].finishedAt = Date()
         currentProcess = nil
         currentJobID = nil
 
-        if cancellationRequested {
-            jobs[index].status = .failed
-            jobs[index].errorMessage = "Cancelled"
-            jobs[index].detail = "Cancelled"
-            cancellationRequested = false
-            for jobIndex in jobs.indices where jobs[jobIndex].status == .waiting {
-                jobs[jobIndex].status = .ready
-            }
-            isConverting = false
-            lastMessage = "Conversion cancelled."
-            return
-        }
+        let wasCancelled = cancellationRequested
+        cancellationRequested = false
 
-        if exitStatus == 0, fileManager.fileExists(atPath: jobs[index].outputURL.path) {
+        if !wasCancelled, exitStatus == 0, fileManager.fileExists(atPath: jobs[index].outputURL.path) {
             jobs[index].status = .done
             jobs[index].progress = 1
             jobs[index].detail = "Saved next to original"
             jobs[index].outputSize = fileSize(at: jobs[index].outputURL)
         } else {
             jobs[index].status = .failed
-            jobs[index].errorMessage = error ?? "HandBrake exited with status \(exitStatus)."
-            jobs[index].detail = jobs[index].errorMessage ?? "Conversion failed"
+            let failure = wasCancelled ? "Cancelled" : (error ?? "HandBrake exited with status \(exitStatus).")
+            jobs[index].errorMessage = failure
+            jobs[index].detail = failure
 
             // We skip any job whose output already exists, so a file present
             // now was written by this run. Leaving a truncated file behind
             // would make every retry skip, so remove it.
             if fileManager.fileExists(atPath: jobs[index].outputURL.path) {
-                try? fileManager.removeItem(at: jobs[index].outputURL)
-                jobs[index].detail += " Partial output removed."
-                jobs[index].outputSize = nil
+                do {
+                    try fileManager.removeItem(at: jobs[index].outputURL)
+                    jobs[index].detail += " Partial output removed."
+                    jobs[index].errorMessage = jobs[index].detail
+                    jobs[index].outputSize = nil
+                } catch {
+                    let cleanupError = "Partial output cleanup failed: \(error.localizedDescription)"
+                    jobs[index].detail += " \(cleanupError)"
+                    jobs[index].errorMessage = jobs[index].detail
+                    jobs[index].outputSize = fileSize(at: jobs[index].outputURL)
+                    lastMessage = cleanupError
+                }
+            } else {
+                jobs[index].detail += " No partial output remained."
+                jobs[index].errorMessage = jobs[index].detail
             }
         }
 
@@ -618,7 +659,15 @@ final class VideoBoxModel: ObservableObject {
         }
         loadLogs()
 
-        runNextJob()
+        if wasCancelled {
+            for jobIndex in jobs.indices where jobs[jobIndex].status == .waiting {
+                jobs[jobIndex].status = .ready
+            }
+            isConverting = false
+            lastMessage = lastMessage ?? "Conversion cancelled."
+        } else {
+            runNextJob()
+        }
     }
 
     private func extractProgress(from output: String) -> Double? {
@@ -947,7 +996,7 @@ struct QueueRow: View {
                 Text(job.detail)
                     .font(.caption2)
                     .foregroundStyle(job.status == .failed ? .red : .secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
         }
         .padding(.vertical, 10)

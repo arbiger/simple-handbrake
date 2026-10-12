@@ -1,6 +1,6 @@
 # Simple HandBrake Converter handoff
 
-Updated: 2026-10-04
+Updated: 2026-10-12
 
 ## Current state
 
@@ -14,22 +14,34 @@ queue header when the queue is idle.
 
 Every finished conversion, successful or failed, writes a log file to
 `~/Library/Logs/Simple HandBrake Converter/`. The name carries the source
-name, original size, compressed size, and finish timestamp:
-`name_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log`. The queue header
-has a single Logs button that opens one window listing every log on disk,
-newest first, with the full text of the selected log. Logs contain local file
-paths and are never uploaded. HandBrake's repeated `Progress: { ... }` blocks
-are stripped before writing, so a log is a few KB of readable text rather than
-around 1.6 MB of JSON.
+name, job UUID, original size, compressed size, and finish timestamp:
+`name_jobUUID_originalSize_compressedSize_yyyy-MM-dd-HH-mm-ss.log`. The source
+stem is limited to 80 UTF-8 bytes, and log creation does not overwrite an
+existing file. The queue header has a single Logs button that opens one window
+listing every log on disk, newest first, with the full text of the selected
+log. Logs contain local file paths and are never uploaded. HandBrake's repeated
+`Progress: { ... }` blocks are stripped before writing, so a log is a few KB
+of readable text rather than around 1.6 MB of JSON.
 
-When a conversion fails, any partial output file the run created is deleted.
-Because a job whose output already exists is skipped before starting, a file
-found at that point was written by the failed run, and leaving it would make
-every retry skip.
+Cancellation and conversion failures share finalization. Any partial output
+file created by that run is removed when possible. The queue row and saved log
+record whether cleanup succeeded or the removal error. Because an output that
+exists before a run is skipped, a file found during failed-run cleanup belongs
+to that run. Cancelled runs save captured CLI output and restore remaining jobs
+to Ready.
+
+The current source drains combined stdout and stderr through EOF before it
+finishes a job. It retains the raw bytes and decodes the complete stream as
+UTF-8 after draining, so chunk boundaries do not corrupt the saved tail.
 
 The visible packaged development app is:
 
 `dist/Simple HandBrake Converter.app`
+
+The app was packaged from the 2026-10-12 source on 2026-10-12. Its executable
+SHA256 matched `.build/out/Products/Release/VideoBox`, and the bundled CLI
+version was checked. `/Applications` was not changed; the already-running app
+process remains on its older loaded build.
 
 It uses the bundled local HandBrakeCLI runtime at:
 
@@ -97,9 +109,20 @@ docs/HANDOFF.md                    This current handoff
 
 ## Evidence already checked
 
-- `swift build` succeeds.
-- `swift build -c release` succeeds.
-- `dist/Simple HandBrake Converter.app` launches locally.
+- Current source after the 2026-10-12 lifecycle patch:
+  `swift build -c release` succeeds, and `git diff --check` passes.
+- `swift scripts/lifecycle-regression.swift Sources/VideoBox/main.swift`
+  passes. It covers live progress while the fake child is running, cancellation
+  cleanup and Ready queue restoration, burst and split-UTF-8 final output,
+  cleanup failure reporting in queue/UI/log, unique long-Unicode UUID log names
+  with no-overwrite behavior, successful conversion, preexisting-output skip,
+  and launch failure. The harness writes only in a generated temporary folder
+  and removes it on exit.
+- The current source was packaged as `dist/Simple HandBrake Converter.app` on
+  2026-10-12. The packaged executable SHA256 matches the release product, and
+  the bundled CLI version was checked.
+- `/Applications` was not touched. The already-running app process is still
+  using its older loaded build; it was not stopped or restarted.
 - The red close button leaves the process running and a subsequent app
   activation reopens the main window.
 - The Dock badge and window title use the current queue position format `n/total`.
@@ -115,8 +138,9 @@ docs/HANDOFF.md                    This current handoff
 - The current local runtime comes from the official 1.11.2 CLI release. A
   reproducible source build should be completed once full Xcode is available;
   the HandBrake macOS build guide requires Xcode for that workflow.
-- No real user video has yet been processed by the UI; only the CLI path and a
-  generated test video have been verified.
+- No current-build GUI conversion, real user-video conversion, or NAS
+  conversion has been performed. Earlier generated test-video and app-launch
+  checks predate the current source patch.
 - There is no advanced preset selector yet by design.
 - macOS's Dock hover tooltip remains the app name; progress is shown directly
   in the Dock badge because AppKit exposes a custom badge string, not a custom

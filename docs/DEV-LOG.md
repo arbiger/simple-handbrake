@@ -170,6 +170,31 @@
 - Applied the same filter to the 13 existing logs: 19 MB down to 284 KB, with
   every header block and all diagnostic lines intact.
 
+## 2026-10-12 — Finalization, pipe capture, and log identity
+
+- Routed cancellation and conversion errors through the same finalization path.
+  Failed and cancelled runs report whether partial output was removed; cleanup
+  failures are shown in the queue row and recorded in the saved log.
+- Read combined stdout and stderr as ordered byte chunks through pipe EOF,
+  waited for process exit, and decoded the complete captured bytes before
+  saving the log so burst tails and split UTF-8 sequences are retained.
+- Added each job UUID to its log filename and capped the source stem at 80
+  UTF-8 bytes. Log creation refuses to overwrite an existing file; the
+  existing-output skip policy remains unchanged.
+- Verified the current source with `swift build -c release` and
+  `git diff --check`.
+- Ran `swift scripts/lifecycle-regression.swift Sources/VideoBox/main.swift`.
+  The fake-CLI checks covered live progress before child exit, cancellation
+  cleanup and queue readiness, burst/split-UTF-8 final output, deletion failure
+  reporting, unique long-Unicode log names, no-overwrite behavior, successful
+  conversion, existing-output skip, and launch failure. Test files and logs
+  were isolated to and removed with a generated temporary directory.
+- Packaged the development app to `dist/` on 2026-10-12. The app executable
+  SHA256 matched `.build/out/Products/Release/VideoBox`, and the bundled CLI
+  version was checked. `/Applications` and the already-running older build
+  were left untouched. No current-build GUI, real-video, or NAS conversion was
+  performed.
+
 ## Next log entry
 
 Record the first real-user-video test, including source path type, output path,
