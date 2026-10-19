@@ -195,6 +195,19 @@
   were left untouched. No current-build GUI, real-video, or NAS conversion was
   performed.
 
+## 2026-10-19 — Duplicate-code markers and flexible panels
+
+- Added a red `Duplicated` queue tag when two or more queued
+  filenames share a normalized leading release code. Site prefixes before `@`,
+  code hyphens/separators, letter case, and trailing title/quality text are
+  ignored for this comparison. The tag is only a warning; every queued file
+  stays eligible for conversion.
+- Made the input and queue panels grow with the window height. The drop zone
+  and queue scroll area use the added space, while the compact minimum height
+  remains intact.
+- `scripts/package-app.sh` built and packaged the release app, and
+  `git diff --check` passed. No GUI resize or real-video conversion was run.
+
 ## Next log entry
 
 Record the first real-user-video test, including source path type, output path,

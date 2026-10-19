@@ -286,6 +286,9 @@ private enum ConversionLog {
 @MainActor
 final class VideoBoxModel: ObservableObject {
     static let preset = "Very Fast 1080p30"
+    private static let releaseCodeExpression = try! NSRegularExpression(
+        pattern: #"^([A-Za-z]{2,10})[-_. ]*([0-9]{2,5})(?=$|[^0-9])"#
+    )
 
     @Published private(set) var jobs: [ConversionJob] = [] {
         didSet { updateSystemProgress() }
@@ -319,6 +322,36 @@ final class VideoBoxModel: ObservableObject {
     var overallProgress: Double {
         guard !jobs.isEmpty else { return 0 }
         return jobs.map(\.progress).reduce(0, +) / Double(jobs.count)
+    }
+
+    /// Release codes are a useful hint that differently named files may be
+    /// the same video. This only marks queue rows; it never removes a job.
+    var possibleDuplicateJobIDs: Set<UUID> {
+        let keyedJobs = jobs.compactMap { job in
+            Self.releaseCode(for: job.inputURL).map { (code: $0, id: job.id) }
+        }
+        let groups = Dictionary(grouping: keyedJobs, by: { $0.code })
+        return Set(groups.values.filter { $0.count > 1 }.flatMap { $0.map { $0.id } })
+    }
+
+    private static func releaseCode(for url: URL) -> String? {
+        var stem = url.deletingPathExtension().lastPathComponent
+        if let at = stem.lastIndex(of: "@") {
+            stem = String(stem[stem.index(after: at)...])
+        }
+
+        guard let token = stem.split(whereSeparator: { $0.isWhitespace || $0 == "[" || $0 == "(" }).first else {
+            return nil
+        }
+
+        let candidate = String(token)
+        let range = NSRange(candidate.startIndex..<candidate.endIndex, in: candidate)
+        guard let match = releaseCodeExpression.firstMatch(in: candidate, range: range),
+              match.numberOfRanges == 3,
+              let lettersRange = Range(match.range(at: 1), in: candidate),
+              let digitsRange = Range(match.range(at: 2), in: candidate) else { return nil }
+
+        return (String(candidate[lettersRange]) + String(candidate[digitsRange])).uppercased()
     }
 
     /// The ordinal of the job currently being processed, not the number of
@@ -736,26 +769,28 @@ struct ContentView: View {
     @ObservedObject var model: VideoBoxModel
     let appDelegate: VideoBoxAppDelegate
     @Environment(\.openWindow) private var openWindow
-    private let panelHeight: CGFloat = 224
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                intro
-                topControls
-                HStack(alignment: .top, spacing: 12) {
-                    dropPanel
-                    queuePanel
+        GeometryReader { geometry in
+            let panelHeight = max(224, geometry.size.height - 210)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    intro
+                    topControls
+                    HStack(alignment: .top, spacing: 12) {
+                        dropPanel(height: panelHeight)
+                        queuePanel(height: panelHeight)
+                    }
+                    footer
+                    if let message = model.lastMessage {
+                        Label(message, systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                footer
-                if let message = model.lastMessage {
-                    Label(message, systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .frame(minHeight: geometry.size.height, alignment: .top)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $model.isDropTargeted) { providers in
@@ -812,7 +847,7 @@ struct ContentView: View {
         }
     }
 
-    private var dropPanel: some View {
+    private func dropPanel(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 sectionLabel("INPUT")
@@ -834,7 +869,7 @@ struct ContentView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(maxWidth: .infinity, minHeight: 132)
+            .frame(maxWidth: .infinity, minHeight: 132, maxHeight: .infinity)
             .padding(12)
             .background(Color(nsColor: .textBackgroundColor))
             .overlay {
@@ -851,7 +886,7 @@ struct ContentView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(height: panelHeight, alignment: .topLeading)
+        .frame(height: height, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay {
@@ -860,8 +895,10 @@ struct ContentView: View {
         }
     }
 
-    private var queuePanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func queuePanel(height: CGFloat) -> some View {
+        let possibleDuplicateIDs = model.possibleDuplicateJobIDs
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Queue")
                     .font(.headline)
@@ -909,18 +946,19 @@ struct ContentView: View {
                         ForEach(model.jobs) { job in
                             QueueRow(
                                 job: job,
+                                isDuplicated: possibleDuplicateIDs.contains(job.id),
                                 remove: { model.remove(jobID: job.id) }
                             )
                             Divider()
                         }
                     }
                 }
-                .frame(minHeight: 145, maxHeight: 240)
+                .frame(minHeight: 145, maxHeight: .infinity)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .frame(height: panelHeight, alignment: .topLeading)
+        .frame(height: height, alignment: .topLeading)
         .background(Color(nsColor: .textBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay {
@@ -955,6 +993,7 @@ struct ContentView: View {
 
 struct QueueRow: View {
     let job: ConversionJob
+    let isDuplicated: Bool
     let remove: () -> Void
 
     var body: some View {
@@ -967,8 +1006,20 @@ struct QueueRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 5))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(job.inputURL.lastPathComponent)
-                        .lineLimit(1)
+                    HStack(spacing: 7) {
+                        Text(job.inputURL.lastPathComponent)
+                            .lineLimit(1)
+                        if isDuplicated {
+                            Text("Duplicated")
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.red)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.red.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .help("Another queued filename has the same release code; both remain convertible.")
+                        }
+                    }
                     Text("\(formattedSize(job.fileSize))  →  \(job.outputURL.lastPathComponent)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

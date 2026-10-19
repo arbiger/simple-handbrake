@@ -1,6 +1,6 @@
 # Simple HandBrake Converter handoff
 
-Updated: 2026-10-12
+Updated: 2026-10-19
 
 ## Current state
 
@@ -8,9 +8,16 @@ The MVP is a compact native macOS SwiftUI app. Its visible name is Simple
 HandBrake Converter.
 
 The main heading has a short description below it. Preset, output policy, and
-Convert controls share the top row. The input and queue panels share a fixed
-height, the window opens at a compact size, and Clear All is available in the
+Convert controls share the top row. The input and queue panels grow with the
+window height while keeping a compact minimum. Clear All is available in the
 queue header when the queue is idle.
+
+Queued files with the same normalized leading release code are marked with a
+red `Duplicated` tag. The check ignores a prefix before `@`, letter case,
+hyphens/separators, and trailing title or quality text; for example,
+`4k688.com@CEAD-771.mp4` and `CEAD771 xxxxx.mp4` share the `CEAD771` key. This
+is a possible-duplicate warning within the current queue only. It does not
+remove either file, and both remain eligible for conversion.
 
 Every finished conversion, successful or failed, writes a log file to
 `~/Library/Logs/Simple HandBrake Converter/`. The name carries the source
@@ -38,7 +45,7 @@ The visible packaged development app is:
 
 `dist/Simple HandBrake Converter.app`
 
-The app was packaged from the 2026-10-12 source on 2026-10-12. Its executable
+The app was packaged from the 2026-10-19 source on 2026-10-19. Its executable
 SHA256 matched `.build/out/Products/Release/VideoBox`, and the bundled CLI
 version was checked. `/Applications` was not changed; the already-running app
 process remains on its older loaded build.
@@ -109,7 +116,7 @@ docs/HANDOFF.md                    This current handoff
 
 ## Evidence already checked
 
-- Current source after the 2026-10-12 lifecycle patch:
+- Current source after the 2026-10-19 UI update:
   `swift build -c release` succeeds, and `git diff --check` passes.
 - `swift scripts/lifecycle-regression.swift Sources/VideoBox/main.swift`
   passes. It covers live progress while the fake child is running, cancellation
@@ -119,8 +126,11 @@ docs/HANDOFF.md                    This current handoff
   and launch failure. The harness writes only in a generated temporary folder
   and removes it on exit.
 - The current source was packaged as `dist/Simple HandBrake Converter.app` on
-  2026-10-12. The packaged executable SHA256 matches the release product, and
+  2026-10-19. The packaged executable SHA256 matches the release product, and
   the bundled CLI version was checked.
+- On 2026-10-19 the queue gained normalized-code duplicate markers and the two
+  main panels became height-flexible. The release build and whitespace check
+  passed; visual resize behavior and a real conversion remain unverified.
 - `/Applications` was not touched. The already-running app process is still
   using its older loaded build; it was not stopped or restarted.
 - The red close button leaves the process running and a subsequent app
